@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2012, FinancialForce.com, inc
+ * Copyright (c), FinancialForce.com, inc
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -39,17 +39,45 @@
  *
  **/
 public virtual with sharing class fflib_SObjectDomain
+		extends fflib_SObjects
 	implements fflib_ISObjectDomain
 {
 	/**
 	 * Provides access to the data represented by this domain class
 	 **/
-	public List<SObject> Records { get; private set;}
-	
+	public List<SObject> Records {
+		get
+		{
+			return getRecords();
+		}
+	}
+
+
 	/**
-	 * Derived from the records provided during construction, provides the native describe for the standard or custom object
-	 **/
-	public Schema.DescribeSObjectResult SObjectDescribe {get; private set;}
+     * Provides access to Trigger.oldMap and allowing it to be mocked in unit-tests
+     **/
+	@TestVisible
+	protected Map<Id, SObject> ExistingRecords
+	{
+		get
+		{
+			if (ExistingRecords == null)
+			{
+				if (System.Test.isRunningTest() & Test.Database.hasRecords())
+				{
+					// If in test context and records are in the mock database use those instead of Trigger.oldMap
+					ExistingRecords = Test.Database.oldRecords;
+				}
+				else
+				{
+					ExistingRecords = Trigger.oldMap;
+				}
+			}
+			return ExistingRecords;
+
+		}
+		private set;
+	}
 
 	/**
 	 * Exposes the configuration for this domain class instance
@@ -62,7 +90,7 @@ public virtual with sharing class fflib_SObjectDomain
 	public static ErrorFactory Errors  {get; private set;}
 	
 	/**
-	 * Useful during unit testing to access mock support for database inserts and udpates (testing without DML)
+	 * Useful during unit testing to access mock support for database inserts and updates (testing without DML)
 	 **/
 	public static TestFactory Test  {get; private set;}
 	
@@ -110,10 +138,9 @@ public virtual with sharing class fflib_SObjectDomain
 	public fflib_SObjectDomain(List<SObject> sObjectList, SObjectType sObjectType)
 	{
 		// Ensure the domain class has its own copy of the data
-		Records = sObjectList.clone(); 
-		// Capture SObjectType describe for this domain class
-		SObjectDescribe = sObjectType.getDescribe();
-		// Configure the Domain object instance 
+		super(sObjectList, sObjectType);
+
+		// Configure the Domain object instance
 		Configuration = new Configuration();		
 	}
 	
@@ -214,7 +241,7 @@ public virtual with sharing class fflib_SObjectDomain
     public virtual void handleAfterUpdate(Map<Id,SObject> existingRecords) 
     {    	
     	if(Configuration.EnforcingTriggerCRUDSecurity && !SObjectDescribe.isUpdateable()) 			    		
-    	   throw new DomainException('Permission to udpate an ' + SObjectDescribe.getName() + ' denied.');
+    	   throw new DomainException('Permission to update an ' + SObjectDescribe.getName() + ' denied.');
     	
     	if(Configuration.OldOnUpdateValidateBehaviour)
     		onValidate();
@@ -251,27 +278,11 @@ public virtual with sharing class fflib_SObjectDomain
     /**
      * Returns the SObjectType this Domain class represents
      **/
-    public SObjectType getSObjectType()
-    {
-    	return SObjectDescribe.getSObjectType();
-    }
-
-    /**
-     * Returns the SObjectType this Domain class represents
-     **/
     public SObjectType sObjectType()
     {
     	return getSObjectType();
     }
 
-    /**
-     * Alternative to the Records property, provided to support mocking of Domain classes
-     **/
-    public List<SObject> getRecords()
-    {
-    	return Records;
-    }
-    
 	/**
 	 * Detects whether any values in context records have changed for given fields as strings
 	 * Returns list of SObject records that have changes in the specified fields
@@ -279,14 +290,22 @@ public virtual with sharing class fflib_SObjectDomain
 	public List<SObject> getChangedRecords(Set<String> fieldNames)
 	{
 		List<SObject> changedRecords = new List<SObject>();
-		for(SObject newRecord : Records)
+		for (SObject newRecord : Records)
 		{
-			Id recordId = (Id)newRecord.get('Id');
-			if(Trigger.oldMap == null || !Trigger.oldMap.containsKey(recordId)) continue;
-			SObject oldRecord = Trigger.oldMap.get(recordId);
-			for(String fieldName : fieldNames)
+			Id recordId = (Id) newRecord.get('Id');
+			if (this.ExistingRecords == null || !this.ExistingRecords.containsKey(recordId))
 			{
-				if(oldRecord.get(fieldName) != newRecord.get(fieldName)) changedRecords.add(newRecord);
+				continue;
+			}
+
+			SObject oldRecord = this.ExistingRecords.get(recordId);
+			for (String fieldName : fieldNames)
+			{
+				if (oldRecord.get(fieldName) != newRecord.get(fieldName))
+				{
+					changedRecords.add(newRecord);
+					break;  // prevents the records from being added multiple times
+				}
 			}
 		}
 		return changedRecords;
@@ -299,14 +318,21 @@ public virtual with sharing class fflib_SObjectDomain
 	public List<SObject> getChangedRecords(Set<Schema.SObjectField> fieldTokens)
 	{
 		List<SObject> changedRecords = new List<SObject>();
-		for(SObject newRecord : Records)
+		for (SObject newRecord : Records)
 		{
-			Id recordId = (Id)newRecord.get('Id');
-			if(Trigger.oldMap == null || !Trigger.oldMap.containsKey(recordId)) continue;
-			SObject oldRecord = Trigger.oldMap.get(recordId);
-			for(Schema.SObjectField fieldToken : fieldTokens)
+			Id recordId = (Id) newRecord.get('Id');
+			if (this.ExistingRecords == null || !this.ExistingRecords.containsKey(recordId))
 			{
-				if(oldRecord.get(fieldToken) != newRecord.get(fieldToken)) changedRecords.add(newRecord);
+				continue;
+			}
+			SObject oldRecord = this.ExistingRecords.get(recordId);
+			for (Schema.SObjectField fieldToken : fieldTokens)
+			{
+				if (oldRecord.get(fieldToken) != newRecord.get(fieldToken))
+				{
+					changedRecords.add(newRecord);
+					break;  // prevents the records from being added multiple times
+				}
 			}
 		}
 		return changedRecords;
@@ -438,7 +464,8 @@ public virtual with sharing class fflib_SObjectDomain
 		if(domains==null || domains.size()==0)
 			return null;		
 		fflib_SObjectDomain domain = domains.remove(domains.size()-1);
-		domain.Records = records;
+
+		domain.setObjects(records);
 		return domain;
 	}
 	

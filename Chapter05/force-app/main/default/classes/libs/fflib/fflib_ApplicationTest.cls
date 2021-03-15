@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014, FinancialForce.com, inc
+ * Copyright (c), FinancialForce.com, inc
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -24,7 +24,6 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
-
 @IsTest
 private class fflib_ApplicationTest 
 {
@@ -33,14 +32,14 @@ private class fflib_ApplicationTest
 	{
 		// Registered Accounts domain class by SObject List
 		Id testAccountId = fflib_IDGenerator.generate(Account.SObjectType);
-		fflib_ISObjectDomain domainObjectAcct = 
+		fflib_IDomain domainObjectAcct =
 			Domain.newInstance(
 				new List<Account> 
 					{ new Account( 
 						Id = testAccountId,
 						Name = 'Test Account') });
 		System.assert(domainObjectAcct instanceof AccountsDomain);
-		System.assertEquals(testAccountId, domainObjectAcct.getRecords()[0].Id);
+		System.assertEquals(testAccountId, getFirstSObject(domainObjectAcct).Id);
 
 		// Registered Accounts domain class by SObject List
 		testAccountId = fflib_IDGenerator.generate(Account.SObjectType);
@@ -52,17 +51,17 @@ private class fflib_ApplicationTest
 						Name = 'Test Account') }
 				, Account.SObjectType);
 		System.assert(domainObjectAcct instanceof AccountsDomain);
-		System.assertEquals(testAccountId, domainObjectAcct.getRecords()[0].Id);		
+		System.assertEquals(testAccountId, getFirstSObject(domainObjectAcct).Id);
 
 		// Registered Opportunities domain class by SObject List
 		Id testOpportunityId = fflib_IDGenerator.generate(Opportunity.SObjectType);
-		fflib_ISObjectDomain domainObjectOpp = 
+		fflib_IDomain domainObjectOpp =
 			Domain.newInstance(
 				new List<Opportunity> 
 					{ new Opportunity( 
 						Id = testOpportunityId,
 						Name = 'Test Opportunity') });
-		System.assertEquals(testOpportunityId, domainObjectOpp.getRecords()[0].Id);		
+		System.assertEquals(testOpportunityId, getFirstSObject(domainObjectOpp).Id);
 		System.assert(domainObjectOpp instanceof OpportuntiesDomain);
 
 		// Test failure for creating new instance using IConstructable2
@@ -75,7 +74,7 @@ private class fflib_ApplicationTest
 						Id = testOpportunityId,
 						Name = 'Test Opportunity') }
 				, Opportunity.SObjectType);
-		System.assertEquals(testOpportunityId, domainObjectOpp.getRecords()[0].Id);		
+		System.assertEquals(testOpportunityId, getFirstSObject(domainObjectOpp).Id);
 		System.assert(domainObjectOpp instanceof OpportuntiesDomain);
 
 		// Given
@@ -110,6 +109,11 @@ private class fflib_ApplicationTest
 		System.assert(domainObjectAcct instanceof fflib_SObjectMocks.SObjectDomain);		
 	}
 
+	private static SObject getFirstSObject(fflib_IDomain domainObjectAcct)
+	{
+		return ((List<SObject>) domainObjectAcct.getObjects())[0];
+	}
+
 	@IsTest
 	private static void callingDomainFactoryWithIdsShouldGiveRegisteredImpls()
 	{
@@ -130,12 +134,12 @@ private class fflib_ApplicationTest
 
 		// When
 		Selector.setMock(selectorMock);
-		fflib_ISObjectDomain domainObjectAcc = Domain.newInstance(new Set<Id> { testAccountId });
+		fflib_IDomain domainObjectAcc = Domain.newInstance(new Set<Id> { testAccountId });
 
 		// Then
-		List<Account> assertAccounts = (List<Account>) domainObjectAcc.getRecords();
+		List<Account> assertAccounts = (List<Account>) domainObjectAcc.getObjects();
 		System.assert(domainObjectAcc instanceof AccountsDomain);
-		System.assertEquals(testAccountId, domainObjectAcc.getRecords()[0].Id);		
+		System.assertEquals(testAccountId, getFirstSObject(domainObjectAcc).Id);
 		System.assertEquals(1, assertAccounts.size());
 		System.assertEquals(testAccountId, assertAccounts[0].Id);
 		System.assertEquals('Test Account', assertAccounts[0].Name);
@@ -188,7 +192,8 @@ private class fflib_ApplicationTest
 			Domain.newInstance(new List<Contact>{ new Contact(LastName = 'TestContactLName') });
 			System.assert(false, 'Expected exception');
 		} catch (System.TypeException e) {
-			System.assert(Pattern.Matches('Invalid conversion from runtime type \\w*\\.?fflib_ApplicationTest\\.ContactsConstructor to \\w*\\.?fflib_SObjectDomain\\.IConstructable',
+
+			System.assert(Pattern.Matches('Invalid conversion from runtime type \\w*\\.?fflib_ApplicationTest\\.ContactsConstructor to \\w*\\.?fflib_IDomainConstructor',
 				e.getMessage()), 'Exception message did not match the expected pattern: ' + e.getMessage());
 		}	
 
@@ -196,7 +201,7 @@ private class fflib_ApplicationTest
 			Domain.newInstance(new List<SObject>{ new Contact(LastName = 'TestContactLName') }, Contact.SObjectType);
 			System.assert(false, 'Expected exception');
 		} catch (System.TypeException e) {
-			System.assert(Pattern.Matches('Invalid conversion from runtime type \\w*\\.?fflib_ApplicationTest\\.ContactsConstructor to \\w*\\.?fflib_SObjectDomain\\.IConstructable2',
+			System.assert(Pattern.Matches('Invalid conversion from runtime type \\w*\\.?fflib_ApplicationTest\\.ContactsConstructor to \\w*\\.?fflib_IDomainConstructor',
 				e.getMessage()), 'Exception message did not match the expected pattern: ' + e.getMessage());
 		}		
 	}	
@@ -445,6 +450,7 @@ private class fflib_ApplicationTest
 		public boolean isUpdateCalled = false;
 		public boolean isDeleteCalled = false;
 		public boolean isPublishCalled = false;
+		public Boolean isEmptyRecycleBinCalled = false;
 
 		public void dmlInsert(List<SObject> objList){
 			this.isInsertCalled = true;
@@ -458,6 +464,10 @@ private class fflib_ApplicationTest
 		public void eventPublish(List<SObject> objList)
 		{
 			this.isPublishCalled = true;
+		}
+		public void emptyRecycleBin(List<SObject> objList)
+		{
+			this.isEmptyRecycleBinCalled = true;
 		}
 	}
 

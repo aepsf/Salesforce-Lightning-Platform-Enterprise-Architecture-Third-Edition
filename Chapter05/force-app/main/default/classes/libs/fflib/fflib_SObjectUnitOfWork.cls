@@ -2,22 +2,22 @@
  * Copyright (c), FinancialForce.com, inc
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without modification,
+ * Redistribution and use in source and binary forms, with or without modification, 
  *   are permitted provided that the following conditions are met:
  *
- * - Redistributions of source code must retain the above copyright notice,
+ * - Redistributions of source code must retain the above copyright notice, 
  *      this list of conditions and the following disclaimer.
- * - Redistributions in binary form must reproduce the above copyright notice,
- *      this list of conditions and the following disclaimer in the documentation
+ * - Redistributions in binary form must reproduce the above copyright notice, 
+ *      this list of conditions and the following disclaimer in the documentation 
  *      and/or other materials provided with the distribution.
- * - Neither the name of the FinancialForce.com, inc nor the names of its contributors
- *      may be used to endorse or promote products derived from this software without
+ * - Neither the name of the FinancialForce.com, inc nor the names of its contributors 
+ *      may be used to endorse or promote products derived from this software without 
  *      specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- *  OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
- *  THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES 
+ *  OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
+ *  THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
  *  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  *  OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  *  OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
@@ -61,6 +61,7 @@ public virtual class fflib_SObjectUnitOfWork
     protected Map<String, Map<Id, SObject>> m_dirtyMapByType = new Map<String, Map<Id, SObject>>();
 
     protected Map<String, Map<Id, SObject>> m_deletedMapByType = new Map<String, Map<Id, SObject>>();
+    protected Map<String, Map<Id, SObject>> m_emptyRecycleBinMapByType = new Map<String, Map<Id, SObject>>();
 
     protected Map<String, Relationships> m_relationships = new Map<String, Relationships>();
 
@@ -89,31 +90,41 @@ public virtual class fflib_SObjectUnitOfWork
         void dmlUpdate(List<SObject> objList);
         void dmlDelete(List<SObject> objList);
         void eventPublish(List<SObject> objList);
+	    void emptyRecycleBin(List<SObject> objList);
     }
 
-    public class SimpleDML implements IDML
+    public virtual class SimpleDML implements IDML
     {
-        public void dmlInsert(List<SObject> objList)
+        public virtual void dmlInsert(List<SObject> objList)
         {
             insert objList;
         }
-        public void dmlUpdate(List<SObject> objList)
+        public virtual void dmlUpdate(List<SObject> objList)
         {
             update objList;
         }
-        public void dmlDelete(List<SObject> objList)
+        public virtual void dmlDelete(List<SObject> objList)
         {
             delete objList;
         }
-        public void eventPublish(List<SObject> objList)
+        public virtual void eventPublish(List<SObject> objList)
         {
             EventBus.publish(objList);
         }
+		public virtual void emptyRecycleBin(List<SObject> objList)
+		{
+			if (objList.isEmpty())
+			{
+				return;
+			}
+
+			Database.emptyRecycleBin(objList);
+		}
     }
     /**
      * Constructs a new UnitOfWork to support work against the given object list
      *
-     * @param sObjectList A list of objects given in dependency order (least dependent first)
+     * @param sObjectTypes A list of objects given in dependency order (least dependent first)
      */
     public fflib_SObjectUnitOfWork(List<Schema.SObjectType> sObjectTypes)
     {
@@ -171,6 +182,7 @@ public virtual class fflib_SObjectUnitOfWork
         m_newListByType.put(sObjectName, new List<SObject>());
         m_dirtyMapByType.put(sObjectName, new Map<Id, SObject>());
         m_deletedMapByType.put(sObjectName, new Map<Id, SObject>());
+	    m_emptyRecycleBinMapByType.put(sObjectName, new Map<Id, SObject>());
         m_relationships.put(sObjectName, new Relationships());
 
         m_publishBeforeListByType.put(sObjectName, new List<SObject>());
@@ -182,7 +194,7 @@ public virtual class fflib_SObjectUnitOfWork
     }
 
     /**
-     * Register a generic peace of work to be invoked during the commitWork phase
+     * Register a generic piece of work to be invoked during the commitWork phase
      **/
     public void registerWork(IDoWork work)
     {
@@ -196,6 +208,32 @@ public virtual class fflib_SObjectUnitOfWork
     {
         m_emailWork.registerEmail(email);
     }
+
+	/**
+	 * Register an deleted record to be removed from the recycle bin during the commitWork method
+	 *
+	 * @param record An deleted record
+	 **/
+	public void registerEmptyRecycleBin(SObject record)
+	{
+		String sObjectType = record.getSObjectType().getDescribe().getName();
+		assertForSupportedSObjectType(m_emptyRecycleBinMapByType, sObjectType);
+
+		m_emptyRecycleBinMapByType.get(sObjectType).put(record.Id, record);
+	}
+
+	/**
+	 * Register deleted records to be removed from the recycle bin during the commitWork method
+	 *
+	 * @param records Deleted records
+	 **/
+	public void registerEmptyRecycleBin(List<SObject> records)
+	{
+		for (SObject record : records)
+		{
+			registerEmptyRecycleBin(record);
+		}
+	}
 
     /**
      * Register a newly created SObject instance to be inserted when commitWork is called
@@ -228,7 +266,7 @@ public virtual class fflib_SObjectUnitOfWork
      * @param relatedToParentField A SObjectField reference to the child field that associates the child record with its parent
      * @param relatedToParentRecord A SObject instance of the parent record (should also be registered as new separately)
      **/
-    public void registerNew(SObject record, Schema.sObjectField relatedToParentField, SObject relatedToParentRecord)
+    public void registerNew(SObject record, Schema.SObjectField relatedToParentField, SObject relatedToParentRecord)
     {
         if (record.Id != null)
             throw new UnitOfWorkException('Only new records can be registered as new');
@@ -250,7 +288,7 @@ public virtual class fflib_SObjectUnitOfWork
      * @param relatedToField A SObjectField reference to the lookup field that relates the two records together
      * @param relatedTo A SObject instance (yet to be committed to the database)
      */
-    public void registerRelationship(SObject record, Schema.sObjectField relatedToField, SObject relatedTo)
+    public void registerRelationship(SObject record, Schema.SObjectField relatedToField, SObject relatedTo)
     {
         String sObjectType = record.getSObjectType().getDescribe().getName();
 
@@ -265,12 +303,34 @@ public virtual class fflib_SObjectUnitOfWork
      *  to the database.  This information will be
      *  used during the commitWork phase to make the references only when related records have been inserted to the database.
      *
-     * @param a single email message instance
+     * @param email a single email message instance
      * @param relatedTo A SObject instance (yet to be committed to the database)
      */
     public void registerRelationship( Messaging.SingleEmailMessage email, SObject relatedTo )
     {
         m_relationships.get( Messaging.SingleEmailMessage.class.getName() ).add(email, relatedTo);
+    }
+
+    /**
+     * Registers a relationship between a record and a lookup value using an external ID field and a provided value. This
+     * information will be used during the commitWork phase to make the lookup reference requested when inserted to the database.
+     *
+     * @param record An existing or newly created record
+     * @param relatedToField A SObjectField reference to the lookup field that relates the two records together
+     * @param externalIdField A SObjectField reference to a field on the target SObject that is marked as isExternalId
+     * @param externalId A Object representing the targeted value of the externalIdField in said lookup
+     *
+     * Usage Example: uow.registerRelationship(recordSObject, record_sobject__c.relationship_field__c, lookup_sobject__c.external_id__c, 'abc123');
+     *
+     * Wraps putSObject, creating a new instance of the lookup sobject using the external id field and value.
+     */
+    public void registerRelationship(SObject record, Schema.SObjectField relatedToField, Schema.SObjectField externalIdField, Object externalId)
+    {
+        // NOTE: Due to the lack of ExternalID references on Standard Objects, this method can not be provided a standardized Unit Test. - Rick Parker
+        String sObjectType = record.getSObjectType().getDescribe().getName();
+        if(!m_newListByType.containsKey(sObjectType))
+            throw new UnitOfWorkException(String.format('SObject type {0} is not supported by this unit of work', new String[] { sObjectType }));
+        m_relationships.get(sObjectType).add(record, relatedToField, externalIdField, externalId);
     }
 
     /**
@@ -283,6 +343,26 @@ public virtual class fflib_SObjectUnitOfWork
         registerDirty(record, new List<SObjectField>());
     }
 
+    /**
+     * Registers the entire records as dirty or just only the dirty fields if the record was already registered
+     *
+     * @param records SObjects to register as dirty
+     * @param dirtyFields A list of modified fields
+     */
+    public void registerDirty(List<SObject> records, List<SObjectField> dirtyFields)
+    {
+	    for (SObject record : records)
+	    {
+		    registerDirty(record, dirtyFields);
+	    }
+    }
+
+	/**
+	 * Registers the entire record as dirty or just only the dirty fields if the record was already registered
+	 *
+	 * @param record SObject to register as dirty
+	 * @param dirtyFields A list of modified fields
+	 */
     public void registerDirty(SObject record, List<SObjectField> dirtyFields)
     {
         if (record.Id == null)
@@ -319,7 +399,7 @@ public virtual class fflib_SObjectUnitOfWork
      * @param relatedToParentField A SObjectField reference to the child field that associates the child record with its parent
      * @param relatedToParentRecord A SObject instance of the parent record (should also be registered as new separately)
      **/
-    public void registerDirty(SObject record, Schema.sObjectField relatedToParentField, SObject relatedToParentRecord)
+    public void registerDirty(SObject record, Schema.SObjectField relatedToParentField, SObject relatedToParentRecord)
     {
         if (record.Id == null)
             throw new UnitOfWorkException('New records cannot be registered as dirty');
@@ -404,6 +484,28 @@ public virtual class fflib_SObjectUnitOfWork
         {
             this.registerDeleted(record);
         }
+    }
+
+	/**
+     * Register a list of existing records to be deleted and removed from the recycle bin during the commitWork method
+     *
+     * @param records A list of existing records
+     **/
+    public void registerPermanentlyDeleted(List<SObject> records)
+    {
+	    this.registerEmptyRecycleBin(records);
+	    this.registerDeleted(records);
+    }
+
+	/**
+     * Register a list of existing records to be deleted and removed from the recycle bin during the commitWork method
+     *
+     * @param record A list of existing records
+     **/
+    public void registerPermanentlyDeleted(SObject record)
+    {
+	    this.registerEmptyRecycleBin(record);
+        this.registerDeleted(record);
     }
 
     /**
@@ -494,7 +596,7 @@ public virtual class fflib_SObjectUnitOfWork
      **/
 	public void commitWork()
 	{
-		Savepoint sp = Database.setSavePoint();
+		Savepoint sp = Database.setSavepoint();
 		Boolean wasSuccessful = false;
 		try
 		{
@@ -523,6 +625,7 @@ public virtual class fflib_SObjectUnitOfWork
 		insertDmlByType();
 		updateDmlByType();
 		deleteDmlByType();
+		emptyRecycleBinByType();
 		resolveEmailRelationships();
 		onDMLFinished();
 
@@ -590,6 +693,15 @@ public virtual class fflib_SObjectUnitOfWork
 		while (objectIdx >= 0)
 		{
 			m_dml.dmlDelete(m_deletedMapByType.get(m_sObjectTypes[objectIdx--].getDescribe().getName()).values());
+		}
+	}
+
+	private void emptyRecycleBinByType()
+	{
+		Integer objectIdx = m_sObjectTypes.size() - 1;
+		while (objectIdx >= 0)
+		{
+			m_dml.emptyRecycleBin(m_emptyRecycleBinMapByType.get(m_sObjectTypes[objectIdx--].getDescribe().getName()).values());
 		}
 	}
 
@@ -678,7 +790,43 @@ public virtual class fflib_SObjectUnitOfWork
 
         }
 
-        public void add(SObject record, Schema.sObjectField relatedToField, SObject relatedTo)
+        public void add(SObject record, Schema.SObjectField relatedToField, Schema.SObjectField externalIdField, Object externalId)
+        {
+            if (relatedToField == null) {
+                throw new UnitOfWorkException('Invalid argument: relatedToField.');
+            }
+
+            String relationshipName = relatedToField.getDescribe().getRelationshipName();
+            if (String.isBlank(relationshipName)) {
+                throw new UnitOfWorkException('Invalid argument: relatedToField. Field supplied is not a relationship field.');
+            }
+
+            List<Schema.SObjectType> relatedObjects = relatedToField.getDescribe().getReferenceTo();
+            Schema.SObjectType relatedObject = relatedObjects[0];
+
+            String externalIdFieldName = externalIdField.getDescribe().getName();
+            Boolean relatedHasExternalIdField = relatedObject.getDescribe().fields.getMap().keySet().contains(externalIdFieldName.toLowerCase());
+            Boolean externalIdFieldIsValid = externalIdField.getDescribe().isExternalId();
+
+            if (!relatedHasExternalIdField) {
+                throw new UnitOfWorkException('Invalid argument: externalIdField. Field supplied is not a known field on the target sObject.');
+            }
+
+            if (!externalIdFieldIsValid) {
+                throw new UnitOfWorkException('Invalid argument: externalIdField. Field supplied is not a marked as an External Identifier.');
+            }
+
+            RelationshipByExternalId relationship = new RelationshipByExternalId();
+            relationship.Record = record;
+            relationship.RelatedToField = relatedToField;
+            relationship.RelatedTo = relatedObject;
+            relationship.RelationshipName = relationshipName;
+            relationship.ExternalIdField = externalIdField;
+            relationship.ExternalId = externalId;
+            m_relationships.add(relationship);
+        }
+
+        public void add(SObject record, Schema.SObjectField relatedToField, SObject relatedTo)
         {
             // Relationship to resolve
             Relationship relationship = new Relationship();
@@ -702,10 +850,27 @@ public virtual class fflib_SObjectUnitOfWork
         void resolve();
     }
 
+    private class RelationshipByExternalId implements IRelationship
+    {
+        public SObject Record;
+        public Schema.SObjectField RelatedToField;
+        public Schema.SObjectType RelatedTo;
+        public String RelationshipName;
+        public Schema.SObjectField ExternalIdField;
+        public Object ExternalId;
+
+        public void resolve()
+        {
+            SObject relationshipObject = this.RelatedTo.newSObject();
+            relationshipObject.put( ExternalIdField.getDescribe().getName(), this.ExternalId );
+            this.Record.putSObject( this.RelationshipName, relationshipObject );
+        }
+    }
+
     private class Relationship implements IRelationship
     {
         public SObject Record;
-        public Schema.sObjectField RelatedToField;
+        public Schema.SObjectField RelatedToField;
         public SObject RelatedTo;
 
         public void resolve()
@@ -721,7 +886,7 @@ public virtual class fflib_SObjectUnitOfWork
 
         public void resolve()
         {
-            this.email.setWhatId( this.RelatedTo.Id );
+            this.email.setWhatId( this.relatedTo.Id );
         }
     }
 
