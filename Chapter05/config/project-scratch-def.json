@@ -1,5 +1,9 @@
 {
   "orgName": "FormulaForce App Development",
   "edition": "Developer",
-  "features": []
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    }
+  }
 }
