@@ -321,6 +321,7 @@ public virtual class fflib_Application
 		public virtual fflib_IDomain newInstance(Set<Id> recordIds)
 		{
 			return newInstance(m_selectorFactory.selectById(recordIds));
+
 		}
 
 		/**
@@ -334,7 +335,7 @@ public virtual class fflib_Application
 		public virtual fflib_IDomain newInstance(List<SObject> records)
 		{
 			SObjectType domainSObjectType = records.getSObjectType();
-			if (domainSObjectType == null)
+			if(domainSObjectType==null)
 				throw new DeveloperException('Unable to determine SObjectType');
 
 			return newInstance((List<Object>) records, (Object) domainSObjectType);

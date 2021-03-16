@@ -110,7 +110,20 @@ private class fflib_SObjectsTest
 		System.assert(domain.selectByRating('Hot').size() == 1);
 	}
 
-
+	@IsTest
+	static void testErrorLogging()
+	{
+		// Test static helpers for raise none domain object instance errors
+		Opportunity opp = new Opportunity ( Name = 'Test', Type = 'Existing Account' );
+		fflib_SObjects.Errors.error('Error', opp);
+		fflib_SObjects.Errors.error('Error', opp, Opportunity.Type);
+		System.assertEquals(2, fflib_SObjects.Errors.getAll().size());
+		System.assertEquals('Error', fflib_SObjects.Errors.getAll()[0].message);
+		System.assertEquals('Error', fflib_SObjects.Errors.getAll()[1].message);
+		System.assertEquals(Opportunity.Type, ((fflib_SObjects.FieldError) fflib_SObjects.Errors.getAll()[1]).field);
+		fflib_SObjects.Errors.clearAll();
+		System.assertEquals(0, fflib_SObjects.Errors.getAll().size());
+	}
 
 	private static DomainAccounts generateDomain()
 	{

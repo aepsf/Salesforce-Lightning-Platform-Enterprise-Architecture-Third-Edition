@@ -31,6 +31,16 @@ public virtual class fflib_SObjects
 	public Schema.DescribeSObjectResult SObjectDescribe {get; private set;}
 
 	/**
+	 * Useful during unit testing to assert at a more granular and robust level for errors raised during the various trigger events
+	 **/
+	public static ErrorFactory Errors  {get; private set;}
+
+	static
+	{
+		Errors = new ErrorFactory();
+	}
+
+	/**
 	 * Class constructor
 	 */
 	public fflib_SObjects(List<SObject> records)
@@ -62,6 +72,33 @@ public virtual class fflib_SObjects
 	public virtual SObjectType getSObjectType()
 	{
 		return SObjectDescribe.getSObjectType();
+	}
+
+	/**
+	 * Ensures logging of errors in the Domain context for later assertions in tests
+	 *
+	 * @param message
+	 * @param record
+	 *
+	 * @return Returns the Error message
+	 **/
+	protected virtual String error(String message, SObject record)
+	{
+		return Errors.error(this, message, record);
+	}
+
+	/**
+	 * Ensures logging of errors in the Domain context for later assertions in tests
+	 *
+	 * @param message
+	 * @param record
+	 * @param field
+	 *
+	 * @return Returns the Error message
+	 **/
+	protected virtual String error(String message, SObject record, SObjectField field)
+	{
+		return fflib_SObjects.Errors.error(this, message, record, field);
 	}
 
 	protected virtual Set<Object> getFieldValues(Schema.SObjectField sObjectField)
@@ -247,5 +284,85 @@ public virtual class fflib_SObjects
 				record.put(sObjectFieldToUpdate, values.get(keyValue));
 			}
 		}
+	}
+
+	/**
+     * Ensures logging of errors in the Domain context for later assertions in tests
+     **/
+	public virtual class ErrorFactory
+	{
+		private List<Error> errorList = new List<Error>();
+
+		private ErrorFactory() {	}
+
+		public String error(String message, SObject record)
+		{
+			return error(null, message, record);
+		}
+
+		public String error(fflib_SObjects domain, String message, SObject record)
+		{
+			ObjectError objectError = new ObjectError();
+			objectError.domain = domain;
+			objectError.message = message;
+			objectError.record = record;
+			errorList.add(objectError);
+			return message;
+		}
+
+		public String error(String message, SObject record, SObjectField field)
+		{
+			return error(null, message, record, field);
+		}
+
+		public String error(fflib_ISObjects domain, String message, SObject record, SObjectField field)
+		{
+			FieldError fieldError = new FieldError();
+			fieldError.domain = domain;
+			fieldError.message = message;
+			fieldError.record = record;
+			fieldError.field = field;
+			errorList.add(fieldError);
+			return message;
+		}
+
+		public List<Error> getAll()
+		{
+			return errorList.clone();
+		}
+
+		public void clearAll()
+		{
+			errorList.clear();
+		}
+	}
+
+	/**
+	 * Ensures logging of errors in the Domain context for later assertions in tests
+	 **/
+	public virtual class FieldError extends ObjectError
+	{
+		public SObjectField field;
+
+		public FieldError()	{ }
+	}
+
+	/**
+	 * Ensures logging of errors in the Domain context for later assertions in tests
+	 **/
+	public virtual class ObjectError extends Error
+	{
+		public SObject record;
+
+		public ObjectError() { }
+	}
+
+	/**
+	 * Ensures logging of errors in the Domain context for later assertions in tests
+	 **/
+	public abstract class Error
+	{
+		public String message;
+		public fflib_ISObjects domain;
 	}
 }
