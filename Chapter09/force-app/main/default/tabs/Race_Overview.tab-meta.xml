@@ -3,6 +3,5 @@
     <description>Created by Lightning App Builder</description>
     <flexiPage>Race_Overview</flexiPage>
     <label>Race Overview</label>
-    <mobileReady>false</mobileReady>
     <motif>Custom12: Circle</motif>
 </CustomTab>
