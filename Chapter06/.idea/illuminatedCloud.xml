@@ -4,10 +4,9 @@
     <option name="connections">
       <list>
         <IlluminatedCloudConnection>
-          <option name="connectionName" value="a6a" />
+          <option name="connectionName" value="a6b" />
           <option name="connectionType" value="SFDX" />
           <option name="defaultModuleName" value="Chapter06" />
-          <option name="offlineSymbolTablePath" value="$PROJECT_DIR$/IlluminatedCloud/a6a/OfflineSymbolTable.zip" />
         </IlluminatedCloudConnection>
       </list>
     </option>

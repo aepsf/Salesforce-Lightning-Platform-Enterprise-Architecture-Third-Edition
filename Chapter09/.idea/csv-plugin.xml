@@ -3,14 +3,21 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
-        <entry key="\force-app\main\default\classes\Application.cls">
+        <entry key="\force-app\main\default\aura\RacingOverviewLWC\RacingOverviewLWC.app">
           <value>
             <Attribute>
-              <option name="separator" value="&#9;" />
+              <option name="separator" value=":" />
             </Attribute>
           </value>
         </entry>
-        <entry key="\force-app\main\default\classes\ApplicationDomain.cls">
+        <entry key="\force-app\main\default\lwc\raceSetup\raceSetup.html">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\force-app\main\default\lwc\raceSetup\raceSetup.js">
           <value>
             <Attribute>
               <option name="separator" value=";" />
